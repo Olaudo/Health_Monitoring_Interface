@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>VitalWatch — Patient Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--bg2:#161b25;--bg3:#1e2535;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#e6edf3;--muted:#7d8590;
+  --ok:#2ea043;   --ok-bg:rgba(46,160,67,0.12);   --ok-bd:rgba(46,160,67,0.3);
+  --warn:#d29922; --warn-bg:rgba(210,153,34,0.12); --warn-bd:rgba(210,153,34,0.3);
+  --crit:#f85149; --crit-bg:rgba(248,81,73,0.10);  --crit-bd:rgba(248,81,73,0.35);
+  --info:#388bfd; --info-bg:rgba(56,139,253,0.10); --info-bd:rgba(56,139,253,0.3);
+  --live:#a78bfa; --live-bg:rgba(167,139,250,0.10);--live-bd:rgba(167,139,250,0.3);
+  --topbar-bg:rgba(13,17,23,0.98);
+  --modal-bg:#1a2030;
+  --chart-grid:rgba(255,255,255,0.04);
+  --chart-tick:#7d8590;
+  --transition:background .25s,color .25s,border-color .25s;
+}
+:root.light{
+  --bg:#f4f6f9;--bg2:#ffffff;--bg3:#eef0f4;
+  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.15);
+  --text:#0d1117;--muted:#6b7280;
+  --ok:#16a34a;   --ok-bg:rgba(22,163,74,0.10);   --ok-bd:rgba(22,163,74,0.3);
+  --warn:#b45309; --warn-bg:rgba(180,83,9,0.10);  --warn-bd:rgba(180,83,9,0.3);
+  --crit:#dc2626; --crit-bg:rgba(220,38,38,0.08); --crit-bd:rgba(220,38,38,0.3);
+  --info:#1d6ecf; --info-bg:rgba(29,110,207,0.08);--info-bd:rgba(29,110,207,0.3);
+  --live:#7c3aed; --live-bg:rgba(124,58,237,0.08);--live-bd:rgba(124,58,237,0.3);
+  --topbar-bg:rgba(255,255,255,0.97);
+  --modal-bg:#ffffff;
+  --chart-grid:rgba(0,0,0,0.05);
+  --chart-tick:#9ca3af;
+}
+html,body{height:100%}
+body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden;transition:var(--transition)}
+
+/* ── TOPBAR ─────────────────────────────── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--topbar-bg)}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.logo{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.ward-badge{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--info-bg);color:var(--info);border:1px solid var(--info-bd)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.alert-pill{font-size:12px;font-weight:500;padding:4px 12px;border-radius:20px;background:var(--crit-bg);color:var(--crit);border:1px solid var(--crit-bd);cursor:pointer}
+.clock{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--muted)}
+.user-pill{font-size:13px;padding:5px 12px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);cursor:pointer}
+.user-pill:hover{background:var(--bg3)}
+
+/* connect btn */
+.ble-btn{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:5px 13px;border-radius:8px;border:1px solid var(--live-bd);background:var(--live-bg);color:var(--live);cursor:pointer;transition:background .15s}
+.ble-btn:hover{background:rgba(167,139,250,0.18)}
+.ble-btn.connected{background:rgba(46,160,67,0.12);border-color:rgba(46,160,67,0.3);color:var(--ok)}
+.ble-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.ble-btn.connected .ble-dot{animation:livepulse 1.5s infinite}
+@keyframes livepulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ── SUMMARY ───────────────────────────── */
+.summary-bar{display:flex;gap:10px;padding:12px 24px;border-bottom:1px solid var(--border);flex-shrink:0;align-items:center}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 18px;min-width:88px}
+.stat-card.crit{background:var(--crit-bg);border-color:var(--crit-bd)}
+.stat-card.warn{background:var(--warn-bg);border-color:var(--warn-bd)}
+.stat-card.ok  {background:var(--ok-bg);  border-color:var(--ok-bd)}
+.stat-card.live{background:var(--live-bg);border-color:var(--live-bd)}
+.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:3px}
+.stat-val  {font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:500}
+.stat-card.crit .stat-val{color:var(--crit)}
+.stat-card.warn .stat-val{color:var(--warn)}
+.stat-card.ok   .stat-val{color:var(--ok)}
+.stat-card.live .stat-val{color:var(--live)}
+
+/* ── LAYOUT ────────────────────────────── */
+.layout{display:grid;grid-template-columns:1fr 290px;flex:1;overflow:hidden;min-height:0}
+.patient-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));align-content:start;gap:12px;padding:16px 18px;overflow-y:auto}
+.patient-grid::-webkit-scrollbar{width:4px}
+.patient-grid::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* ── PATIENT CARD ──────────────────────── */
+.pt-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .18s,transform .12s;position:relative}
+.pt-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.pt-card.warning {border-color:var(--warn-bd);background:rgba(210,153,34,0.05)}
+.pt-card.critical{border-color:var(--crit-bd);background:rgba(248,81,73,0.05)}
+.pt-card.live-connected{border-color:var(--live-bd)!important;background:rgba(167,139,250,0.04)!important}
+
+
+.pt-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.pt-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.pt-meta{font-size:11px;color:var(--muted)}
+.badge{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.badge.stable  {background:var(--ok-bg);  color:var(--ok);  border:1px solid var(--ok-bd)}
+.badge.warning {background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-bd)}
+.badge.critical{background:var(--crit-bg);color:var(--crit);border:1px solid var(--crit-bd)}
+.badge.live    {background:var(--live-bg);color:var(--live);border:1px solid var(--live-bd);animation:livepulse 1.5s infinite}
+
+.vitals-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.vital{background:var(--bg3);border-radius:8px;padding:7px 9px;transition:background .3s}
+.vital.flash{background:rgba(167,139,250,0.15)}
+.v-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.v-val{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:500;transition:color .2s}
+.v-unit{font-size:10px;color:var(--muted);margin-left:2px}
+.v-val.hi{color:var(--crit)}
+.v-val.wn{color:var(--warn)}
+.v-val.live-val{color:var(--live)}
+.pt-footer{font-size:10px;color:var(--muted);margin-top:9px;text-align:right}
+
+/* ── SIDEBAR ───────────────────────────── */
+.sidebar{border-left:1px solid var(--border);background:var(--bg2);overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:0}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.panel-title{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;margin-bottom:10px}
+.mt{margin-top:20px}
+.alert-list{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.alert-item{display:flex;gap:8px;padding:9px 10px;border-radius:8px;border:1px solid;font-size:12px}
+.alert-item.critical{background:var(--crit-bg);border-color:var(--crit-bd)}
+.alert-item.warning {background:var(--warn-bg);border-color:var(--warn-bd)}
+.alert-item.info    {background:var(--info-bg); border-color:var(--info-bd)}
+.a-icon{font-size:13px;flex-shrink:0;margin-top:1px}
+.a-title{font-weight:600;margin-bottom:2px;line-height:1.3}
+.alert-item.critical .a-title{color:var(--crit)}
+.alert-item.warning  .a-title{color:var(--warn)}
+.alert-item.info     .a-title{color:var(--info)}
+.a-desc{color:var(--muted);font-size:11px}
+.chart-wrap{background:var(--bg3);border-radius:10px;padding:10px;margin-bottom:4px}
+.theme-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
+.modal-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:13px;outline:none;margin-bottom:0}
+.modal-input:focus{border-color:var(--info)}
+.theme-btn:hover{background:var(--bg3)}
+
+/* ── DEVICE MODAL ──────────────────────── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:100;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto}
+.modal-bg.open{display:flex}
+.modal{background:var(--modal-bg);border:1px solid var(--border2);border-radius:16px;padding:24px;width:420px;max-width:95vw;max-height:92vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:6px}
+.modal-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.device-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.device-option{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;transition:border-color .15s,background .15s}
+.device-option:hover{border-color:var(--live-bd);background:var(--live-bg)}
+.device-option.selected{border-color:var(--live-bd);background:var(--live-bg)}
+.d-ico{font-size:18px;width:26px;text-align:center;flex-shrink:0}
+.d-info{}
+.d-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.d-desc{font-size:11px;color:var(--muted)}
+.modal-section{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;font-weight:600}
+.bed-select-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.bed-chip{padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-size:12px;cursor:pointer;transition:all .15s}
+.bed-chip:hover{border-color:var(--live-bd)}
+.bed-chip.selected{border-color:var(--live-bd);background:var(--live-bg);color:var(--live)}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end}
+.mbtn{padding:8px 18px;border-radius:8px;font-size:13px;cursor:pointer;border:1px solid var(--border);font-family:'IBM Plex Sans',sans-serif;font-weight:500;background:transparent;color:var(--muted)}
+.mbtn:hover{background:var(--bg3)}
+.mbtn.primary{background:var(--live);border-color:var(--live);color:#fff}
+.mbtn.primary:hover{opacity:.88}
+.mbtn.danger{background:var(--crit-bg);border-color:var(--crit-bd);color:var(--crit)}
+.ble-status{font-size:12px;padding:8px 12px;border-radius:8px;background:var(--bg3);color:var(--muted);margin-bottom:12px;min-height:32px;display:flex;align-items:center;gap:8px}
+.ble-status.ok{color:var(--ok);background:var(--ok-bg)}
+.ble-status.err{color:var(--crit);background:var(--crit-bg)}
+</style>
+</head>
+<body>
+
+<!-- DEVICE CONNECT MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <div class="modal-title">🔵 Connect Wearable Device</div>
+    <div class="modal-sub">Pair a Bluetooth heart rate monitor and stream live vitals into a patient bed. Works with Polar H10, Apple Watch, Garmin, Fitbit Sense, and any BLE HR device.</div>
+
+    <div class="modal-section">Device Type</div>
+    <div class="device-list">
+      <div class="device-option selected" onclick="selectDevice(this,'polar')" data-type="polar">
+        <div class="d-ico">❤️</div>
+        <div class="d-info"><div class="d-name">Polar H10 / H9</div><div class="d-desc">Chest strap — most accurate. HR + RR interval</div></div>
+      </div>
+      <div class="device-option" onclick="selectDevice(this,'watch')" data-type="watch">
+        <div class="d-ico">⌚</div>
+        <div class="d-info"><div class="d-name">Smartwatch / Wristband</div><div class="d-desc">Apple Watch, Garmin, Fitbit — HR via BLE HRS</div></div>
+      </div>
+      <div class="device-option" onclick="selectDevice(this,'oximeter')" data-type="oximeter">
+        <div class="d-ico">🩺</div>
+        <div class="d-info"><div class="d-name">Pulse Oximeter</div><div class="d-desc">Fingertip SpO₂ + HR (Bluetooth enabled models)</div></div>
+      </div>
+      <div class="device-option" onclick="selectDevice(this,'demo')" data-type="demo" style="border-color:rgba(167,139,250,0.3);background:rgba(167,139,250,0.06)">
+        <div class="d-ico">🎭</div>
+        <div class="d-info"><div class="d-name">Demo Mode — No hardware needed</div><div class="d-desc">Simulates a live Polar H10 with realistic HR + SpO₂ + RR data</div></div>
+      </div>
+    </div>
+
+    <div class="modal-section">Assign to Patient Bed</div>
+    <div class="bed-select-row" id="bedSelectRow"></div>
+
+    <div class="ble-status" id="bleStatus">ℹ️ Requires Chrome or Edge + HTTPS (or localhost). Make sure your device is powered on and not paired to another app, then hit Scan.</div>
+
+    <div class="modal-btns">
+      <button class="mbtn danger" id="disconnectBtn" style="display:none" onclick="disconnectDevice()">Disconnect</button>
+      <button class="mbtn" onclick="closeModal()">Cancel</button>
+      <button class="mbtn" id="demoBtn" onclick="startDemo()" style="border-color:rgba(167,139,250,0.4);color:#a78bfa">▶ Run Demo</button>
+      <button class="mbtn primary" id="connectBtn" onclick="startBluetooth()">🔍 Scan & Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+
+<!-- LOGIN MODAL -->
+<div class="modal-bg open" id="loginModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">🏥 VitalWatch Login</div>
+    <div class="modal-sub">Sign in with your hospital credentials, or register a new hospital.</div>
+    <div id="loginView">
+      <div class="modal-section">API Server</div>
+      <input class="modal-input" id="apiUrl" placeholder="http://localhost:8000" value="http://localhost:8000"/>
+      <div class="modal-section" style="margin-top:10px">Email</div>
+      <input class="modal-input" id="loginEmail" placeholder="doctor@hospital.com" type="email"/>
+      <div class="modal-section" style="margin-top:10px">Password</div>
+      <input class="modal-input" id="loginPassword" placeholder="••••••••" type="password" onkeydown="if(event.key==='Enter')doLogin()"/>
+      <div class="ble-status" id="loginStatus" style="margin-top:12px">Enter your credentials to continue.</div>
+      <div class="modal-btns" style="margin-top:12px">
+        <button class="mbtn" onclick="showRegister()">Register Hospital</button>
+        <button class="mbtn primary" onclick="doLogin()">Sign In →</button>
+      </div>
+      <div style="text-align:center;margin-top:10px">
+        <button onclick="useDemoMode()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline">Skip login — use demo data</button>
+      </div>
+    </div>
+    <div id="registerView" style="display:none">
+      <div class="modal-section">Hospital Name</div>
+      <input class="modal-input" id="regName" placeholder="St. Mary's Medical Center"/>
+      <div class="modal-section" style="margin-top:8px">Slug (URL identifier)</div>
+      <input class="modal-input" id="regSlug" placeholder="st-marys-london"/>
+      <div class="modal-section" style="margin-top:8px">City / Country</div>
+      <div style="display:flex;gap:8px">
+        <input class="modal-input" id="regCity" placeholder="London" style="flex:1"/>
+        <input class="modal-input" id="regCountry" placeholder="UK" style="flex:1"/>
+      </div>
+      <div class="modal-section" style="margin-top:8px">Admin Email</div>
+      <input class="modal-input" id="regEmail" placeholder="admin@hospital.com"/>
+      <div class="modal-section" style="margin-top:8px">Admin Password</div>
+      <input class="modal-input" id="regPass" type="password" placeholder="min 8 characters"/>
+      <div class="modal-section" style="margin-top:8px">Admin Name</div>
+      <div style="display:flex;gap:8px">
+        <input class="modal-input" id="regFirst" placeholder="First" style="flex:1"/>
+        <input class="modal-input" id="regLast" placeholder="Last" style="flex:1"/>
+      </div>
+      <div class="ble-status" id="regStatus" style="margin-top:12px">Fill in your hospital details.</div>
+      <div class="modal-btns" style="margin-top:12px">
+        <button class="mbtn" onclick="showLogin()">← Back to Login</button>
+        <button class="mbtn primary" onclick="doRegister()">Register & Sign In →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIT PATIENT MODAL -->
+<div class="modal-bg" id="admitModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">➕ Admit New Patient</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">
+      <div><div class="modal-section">First Name</div><input class="modal-input" id="aFirst" placeholder="First"/></div>
+      <div><div class="modal-section">Last Name</div><input class="modal-input" id="aLast" placeholder="Last"/></div>
+      <div><div class="modal-section">Age</div><input class="modal-input" id="aAge" type="number" placeholder="45"/></div>
+      <div><div class="modal-section">Gender</div>
+        <select class="modal-input" id="aGender" style="height:36px">
+          <option value="M">Male</option><option value="F">Female</option><option value="O">Other</option>
+        </select>
+      </div>
+      <div><div class="modal-section">Bed Number</div><input class="modal-input" id="aBed" placeholder="Bed 13"/></div>
+      <div><div class="modal-section">Ward</div>
+        <select class="modal-input" id="aWard" style="height:36px">
+          <option>ICU-A</option><option>ICU-B</option><option>General-A</option><option>General-B</option><option>Step-Down</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-section">Diagnosis (optional)</div>
+    <input class="modal-input" id="aDiag" placeholder="e.g. Post-op cardiac surgery"/>
+    <div class="modal-section" style="margin-top:8px">Attending Physician</div>
+    <input class="modal-input" id="aDoc" placeholder="Dr. Smith"/>
+    <div class="ble-status" id="admitStatus" style="margin-top:12px">All connected dashboards update instantly when admitted.</div>
+    <div class="modal-btns" style="margin-top:12px">
+      <button class="mbtn" onclick="closeAdmit()">Cancel</button>
+      <button class="mbtn primary" onclick="doAdmit()">Admit Patient →</button>
+    </div>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo">🏥 VitalWatch</span>
+    <span class="ward-badge">ICU Ward A</span>
+  </div>
+  <div class="topbar-right">
+    <button class="mbtn" onclick="openAdmit()" id="admitBtn" style="display:none;padding:5px 12px;font-size:12px;border-color:var(--ok-bd);color:var(--ok)">➕ Admit Patient</button>
+    <button class="ble-btn" id="bleBtn" onclick="openModal()">
+      <div class="ble-dot"></div>
+      <span id="bleBtnLabel">Connect Device</span>
+    </button>
+    <div class="alert-pill">● 5 Active Alerts</div>
+    <div class="clock" id="clock">--:--:--</div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark mode">🌙</button>
+    <div class="user-pill" id="userPill">Dr. Chen ▾</div>
+  </div>
+</header>
+
+<div class="summary-bar">
+  <div class="stat-card">      <div class="stat-label">Patients</div><div class="stat-val">12</div></div>
+  <div class="stat-card crit"> <div class="stat-label">Critical</div><div class="stat-val" id="sCrit">2</div></div>
+  <div class="stat-card warn"> <div class="stat-label">Warning</div> <div class="stat-val" id="sWarn">3</div></div>
+  <div class="stat-card ok">   <div class="stat-label">Stable</div>  <div class="stat-val" id="sOk">7</div></div>
+  <div class="stat-card live" id="liveCard" style="display:none">
+    <div class="stat-label">Live HR</div>
+    <div class="stat-val" id="liveHR">—</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="patient-grid" id="patientGrid"></div>
+  <aside class="sidebar">
+    <div class="panel-title">Active Alerts</div>
+    <div class="alert-list" id="alertList"></div>
+    <div class="panel-title mt" id="chartLabel">HR — Bed 4 (live)</div>
+    <div class="chart-wrap"><canvas id="hrChart" height="100"></canvas></div>
+    <div class="panel-title mt" id="spo2Label">SpO₂ — Bed 4</div>
+    <div class="chart-wrap"><canvas id="spo2Chart" height="90"></canvas></div>
+  </aside>
+</div>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────
+// Change this to your deployed backend URL
+const API_URL = localStorage.getItem('vw_api') || 'http://localhost:8000';
+let AUTH_TOKEN   = localStorage.getItem('vw_token') || null;
+let HOSPITAL_ID  = parseInt(localStorage.getItem('vw_hospital_id')) || null;
+let STAFF_NAME   = localStorage.getItem('vw_staff_name') || 'Staff';
+let STAFF_ROLE   = localStorage.getItem('vw_role') || 'nurse';
+let ws           = null;   // WebSocket connection
+
+// ── PATIENT DATA ──────────────────────────────────────────
+const PATIENTS = [
+  {id:1, name:'James Harlow',    bed:'Bed 1',  age:67, ward:'ICU-A',     status:'critical', v:{hr:128,spo2:88, sbp:162,dbp:98, rr:26,temp:38.9}},
+  {id:2, name:'Maria Santos',    bed:'Bed 2',  age:54, ward:'ICU-A',     status:'warning',  v:{hr:102,spo2:92, sbp:148,dbp:90, rr:22,temp:37.8}},
+  {id:3, name:'Robert Chen',     bed:'Bed 3',  age:72, ward:'ICU-A',     status:'stable',   v:{hr:74, spo2:97, sbp:118,dbp:76, rr:16,temp:36.7}},
+  {id:4, name:'Aisha Okonkwo',   bed:'Bed 4',  age:45, ward:'ICU-A',     status:'stable',   v:{hr:68, spo2:98, sbp:112,dbp:70, rr:14,temp:36.5}},
+  {id:5, name:'David Reyes',     bed:'Bed 5',  age:81, ward:'ICU-B',     status:'warning',  v:{hr:55, spo2:91, sbp:155,dbp:94, rr:20,temp:37.4}},
+  {id:6, name:'Helen Park',      bed:'Bed 6',  age:63, ward:'ICU-B',     status:'stable',   v:{hr:80, spo2:96, sbp:124,dbp:78, rr:15,temp:36.8}},
+  {id:7, name:'Thomas Wright',   bed:'Bed 7',  age:59, ward:'ICU-A',     status:'critical', v:{hr:140,spo2:86, sbp:170,dbp:105,rr:28,temp:39.2}},
+  {id:8, name:'Sofia Andersen',  bed:'Bed 8',  age:38, ward:'General-A', status:'stable',   v:{hr:72, spo2:99, sbp:110,dbp:68, rr:13,temp:36.6}},
+  {id:9, name:'William Johnson', bed:'Bed 9',  age:70, ward:'General-A', status:'stable',   v:{hr:78, spo2:97, sbp:122,dbp:80, rr:16,temp:36.9}},
+  {id:10,name:'Priya Patel',     bed:'Bed 10', age:55, ward:'Step-Down', status:'warning',  v:{hr:96, spo2:93, sbp:144,dbp:88, rr:21,temp:37.6}},
+  {id:11,name:'Carlos Rivera',   bed:'Bed 11', age:60, ward:'Step-Down', status:'stable',   v:{hr:76, spo2:97, sbp:128,dbp:82, rr:15,temp:36.7}},
+  {id:12,name:'Mei Zhang',       bed:'Bed 12', age:34, ward:'General-A', status:'stable',   v:{hr:65, spo2:99, sbp:108,dbp:66, rr:13,temp:36.4}},
+];
+const ALERTS = [
+  {type:'critical',icon:'🚨',title:'Bed 1 — HR Critical',   desc:'Heart rate 128 bpm › threshold 120'},
+  {type:'critical',icon:'🚨',title:'Bed 7 — SpO₂ Critical', desc:'Oxygen sat 86% ‹ threshold 90%'},
+  {type:'warning', icon:'⚠️',title:'Bed 2 — BP Elevated',   desc:'Systolic 148 mmHg — monitor closely'},
+  {type:'warning', icon:'⚠️',title:'Bed 5 — HR Low',        desc:'Heart rate 55 bpm ‹ threshold 60'},
+  {type:'info',    icon:'ℹ️', title:'Bed 3 — Meds due',      desc:'Next dose due in 18 minutes'},
+];
+
+// ── BLE STATE ─────────────────────────────────────────────
+let bleDevice=null, bleChar=null;
+let connectedBed=null;       // patient id wearable is assigned to
+let selectedDeviceType='polar';
+let selectedBedId=1;
+let lastLiveHR=null;
+
+// ── THRESHOLD HELPER ──────────────────────────────────────
+function vClass(k,v){
+  const t={
+    hr:  v=>v>120||v<50?'hi':v>100||v<60?'wn':'',
+    spo2:v=>v<90?'hi':v<95?'wn':'',
+    sbp: v=>v>160||v<80?'hi':v>140||v<90?'wn':'',
+    rr:  v=>v>25||v<10?'hi':v>20||v<12?'wn':'',
+    temp:v=>v>38.5||v<35?'hi':v>37.3?'wn':'',
+  };
+  return t[k]?t[k](v):'';
+}
+
+// ── RENDER ────────────────────────────────────────────────
+function renderPatients(){
+  document.getElementById('patientGrid').innerHTML=PATIENTS.map(p=>{
+    const v=p.v;
+    const isLive=connectedBed===p.id;
+    const row=(lbl,k,val,u,forceClass='')=>{
+      const cls=forceClass||(isLive&&k==='hr'?'live-val':vClass(k,val));
+      return `<div class="vital${isLive&&k==='hr'?' flash-once':''}">
+        <div class="v-label">${lbl}${isLive&&k==='hr'?' 🔵':''}</div>
+        <div class="v-val ${cls}">${val}<span class="v-unit">${u}</span></div>
+      </div>`;
+    };
+    return `<div class="pt-card ${isLive?'live-connected':p.status}" id="ptcard-${p.id}">
+      <div class="pt-head">
+        <div><div class="pt-name">${p.name}</div><div class="pt-meta">${p.bed} · ${p.age}y · ${p.ward}</div></div>
+        <span class="badge ${isLive?'live':p.status}">${isLive?'● LIVE':p.status}</span>
+      </div>
+      <div class="vitals-grid">
+        ${row('Heart Rate','hr',Math.round(v.hr),'bpm')}
+        ${row('SpO₂','spo2',Math.round(v.spo2),'%')}
+        ${row('Sys BP','sbp',Math.round(v.sbp),'mmHg')}
+        ${row('Resp Rate','rr',Math.round(v.rr),'/min')}
+        ${row('Temp','temp',v.temp.toFixed(1),'°C')}
+        <div class="vital"><div class="v-label">Dia BP</div>
+          <div class="v-val">${Math.round(v.dbp)}<span class="v-unit">mmHg</span></div></div>
+      </div>
+      <div class="pt-footer">${isLive?'🔵 Live wearable data':'Updated just now'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAlerts(){
+  document.getElementById('alertList').innerHTML=ALERTS.map(a=>
+    `<div class="alert-item ${a.type}"><div class="a-icon">${a.icon}</div>
+     <div><div class="a-title">${a.title}</div><div class="a-desc">${a.desc}</div></div></div>`
+  ).join('');
+}
+
+// ── JITTER (sim for non-live beds) ────────────────────────
+function jitter(){
+  PATIENTS.forEach(p=>{
+    if(p.id===connectedBed)return; // live bed — don't overwrite
+    p.v.hr  =Math.max(40, Math.min(180,p.v.hr  +(Math.random()-.5)*4));
+    p.v.spo2=Math.max(80, Math.min(100,p.v.spo2+(Math.random()-.5)*.8));
+    p.v.sbp =Math.max(70, Math.min(200,p.v.sbp +(Math.random()-.5)*3));
+    p.v.rr  =Math.max(6,  Math.min(35, p.v.rr  +(Math.random()-.5)*1));
+    p.v.temp=Math.max(33, Math.min(42, p.v.temp+(Math.random()-.5)*.08));
+  });
+  renderPatients();
+  updateStats();
+}
+
+function updateStats(){
+  const c=PATIENTS.filter(p=>p.status==='critical'&&p.id!==connectedBed).length;
+  const w=PATIENTS.filter(p=>p.status==='warning'&&p.id!==connectedBed).length;
+  document.getElementById('sCrit').textContent=c;
+  document.getElementById('sWarn').textContent=w;
+  document.getElementById('sOk').textContent=PATIENTS.length-c-w-(connectedBed?1:0);
+}
+
+// ── CHARTS ────────────────────────────────────────────────
+function makeChart(id,color,yMin,yMax,baseVal,noise){
+  const n=30;
+  const data=Array.from({length:n},()=>baseVal+(Math.random()-.5)*noise*2);
+  return new Chart(document.getElementById(id),{
+    type:'line',
+    data:{
+      labels:Array.from({length:n},(_,i)=>i===n-1?'now':`-${n-1-i}s`),
+      datasets:[{data,borderColor:color,
+        backgroundColor:color.replace('rgb','rgba').replace(')',',0.07)'),
+        borderWidth:1.5,pointRadius:0,tension:0.4,fill:true}]
+    },
+    options:{responsive:true,maintainAspectRatio:true,animation:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7d8590',font:{size:9},maxTicksLimit:6}},
+        y:{min:yMin,max:yMax,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#7d8590',font:{size:9},maxTicksLimit:5}}
+      }
+    }
+  });
+}
+
+const p4=PATIENTS.find(p=>p.id===4).v;
+const hrC  =makeChart('hrChart',  'rgb(248,81,73)',  40,160,p4.hr,  5);
+const spo2C=makeChart('spo2Chart','rgb(56,139,253)', 80,100,p4.spo2,1);
+
+function pushCharts(patientId){
+  const p=PATIENTS.find(x=>x.id===patientId);
+  if(!p)return;
+  hrC.data.datasets[0].data.push(Math.round(p.v.hr));
+  hrC.data.datasets[0].data.shift();
+  hrC.update('none');
+  spo2C.data.datasets[0].data.push(Math.round(p.v.spo2*10)/10);
+  spo2C.data.datasets[0].data.shift();
+  spo2C.update('none');
+}
+
+// ── WEB BLUETOOTH ─────────────────────────────────────────
+// Standard BLE Heart Rate Service UUID (Bluetooth SIG assigned)
+const HR_SERVICE     = 'heart_rate';           // same as 0x180D
+const HR_MEASUREMENT = 'heart_rate_measurement'; // same as 0x2A37
+const BATTERY_SVC    = 'battery_service';
+
+async function startBluetooth(){
+  // Check browser support
+  if(!navigator.bluetooth){
+    setBleStatus('⚠️ Web Bluetooth not supported. Use Chrome or Edge on desktop/Android. Safari is not supported.','err');
+    document.getElementById('connectBtn').disabled=false;
+    return;
+  }
+
+  // Check if we're on a secure context (HTTPS or localhost)
+  if(!window.isSecureContext){
+    setBleStatus('⚠️ HTTPS required. Open via localhost or deploy to GitHub Pages / Netlify.','err');
+    document.getElementById('connectBtn').disabled=false;
+    return;
+  }
+
+  setBleStatus('Opening Bluetooth picker — select your device from the list…','');
+  document.getElementById('connectBtn').disabled=true;
+
+  try {
+    // IMPORTANT: Each filter object must use only ONE property type.
+    // Mixing services + namePrefix in one object causes the requestDevice error.
+    // We separate them into individual filter objects.
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters:[
+        { services: [HR_SERVICE] },          // any certified HR device
+        { namePrefix: 'Polar' },              // Polar H10, H9, OH1
+        { namePrefix: 'Garmin' },             // Garmin HRM-Pro, Forerunner
+        { namePrefix: 'Fitbit' },             // Fitbit Sense, Versa
+        { namePrefix: 'WHOOP' },              // WHOOP 4.0
+        { namePrefix: 'MiSmart' },            // Xiaomi band
+        { namePrefix: 'HRM' },               // generic HRM bands
+        { namePrefix: 'Wahoo' },              // Wahoo TICKR
+        { namePrefix: 'CooSpo' },             // CooSpo H808S (budget HR)
+      ],
+      optionalServices: [HR_SERVICE, BATTERY_SVC],
+    });
+
+    setBleStatus(`Found: "${bleDevice.name || 'Unknown device'}" — connecting to GATT server…`,'');
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+    // Connect to GATT server with retry logic
+    let server;
+    for(let attempt=1; attempt<=3; attempt++){
+      try {
+        server = await bleDevice.gatt.connect();
+        break;
+      } catch(connErr){
+        if(attempt===3) throw connErr;
+        await new Promise(r=>setTimeout(r,500*attempt));
+        setBleStatus(`Connecting… attempt ${attempt+1}/3`,'');
+      }
+    }
+
+    setBleStatus(`Connected to GATT — discovering Heart Rate service…`,'');
+    const service = await server.getPrimaryService(HR_SERVICE);
+    bleChar = await service.getCharacteristic(HR_MEASUREMENT);
+    await bleChar.startNotifications();
+    bleChar.addEventListener('characteristicvaluechanged', onHRData);
+    onConnected();
+
+  } catch(e){
+    document.getElementById('connectBtn').disabled=false;
+    // Give user-friendly messages for each error type
+    if(e.name==='NotFoundError'||e.message?.includes('User cancelled')){
+      setBleStatus('No device selected. Hit Scan & Connect and choose your device from the browser picker.','err');
+    } else if(e.name==='SecurityError'){
+      setBleStatus('Bluetooth permission denied. Allow Bluetooth access in your browser settings.','err');
+    } else if(e.name==='NetworkError'||e.message?.includes('GATT')){
+      setBleStatus(`GATT connection failed. Make sure the device is on, charged, and not connected to another app. Error: ${e.message}`,'err');
+    } else if(e.message?.includes('getPrimaryService')||e.message?.includes('getCharacteristic')){
+      setBleStatus(`Device connected but Heart Rate service not found. This device may not broadcast standard BLE HR data. Try a Polar H10 or Garmin HRM-Pro.`,'err');
+    } else {
+      setBleStatus(`Error: ${e.name} — ${e.message}`,'err');
+    }
+  }
+}
+
+function onHRData(event){
+  // Parse BLE Heart Rate Measurement characteristic (IEEE 11073)
+  const value = event.target.value;
+  const flags = value.getUint8(0);
+  const hrFormat = flags & 0x1; // 0 = UINT8, 1 = UINT16
+  const hr = hrFormat ? value.getUint16(1, true) : value.getUint8(1);
+
+  // RR intervals — bit 4 of flags, in 1/1024 sec units (Bluetooth SIG spec)
+  const energyPresent = (flags >> 3) & 0x1;
+  const rrPresent     = (flags >> 4) & 0x1;
+  let rr = null;
+  const rrOffset = 1 + (hrFormat ? 2 : 1) + (energyPresent ? 2 : 0);
+  if(rrPresent && value.byteLength > rrOffset + 1){
+    const rrRaw = value.getUint16(rrOffset, true);
+    rr = Math.round(rrRaw / 1024 * 1000);
+  }
+
+  // Update the assigned patient's vitals
+  const p = PATIENTS.find(x=>x.id===connectedBed);
+  if(p){
+    p.v.hr = hr;
+    if(rr && rr > 0){
+      // derive resp rate from RR variability (rough estimate)
+      p.v.rr = Math.round(60000 / rr / 4 + 12);
+    }
+    // Flash the HR vital cell
+    flashVital(connectedBed,'hr');
+  }
+
+  lastLiveHR = hr;
+  document.getElementById('liveHR').textContent = hr;
+
+  // Push to chart if this patient is the charted one
+  pushCharts(connectedBed);
+
+  // Check thresholds
+  if(hr>120) triggerLiveAlert('critical',`🚨 Live HR Critical — ${PATIENTS.find(x=>x.id===connectedBed)?.bed}`,`Heart rate ${hr} bpm from wearable`);
+  else if(hr<50) triggerLiveAlert('critical',`🚨 Live HR Low — ${PATIENTS.find(x=>x.id===connectedBed)?.bed}`,`Heart rate ${hr} bpm from wearable`);
+}
+
+function flashVital(patientId, key){
+  renderPatients();
+}
+
+function onConnected(){
+  connectedBed = selectedBedId;
+  const p = PATIENTS.find(x => x.id === connectedBed);
+  const deviceName = bleDevice?.name || (demoTimer !== null ? 'Demo — Polar H10' : 'Device');
+  // Reset chart with this patient's current baseline
+  const n = hrC.data.datasets[0].data.length;
+  hrC.data.datasets[0].data   = Array.from({length:n}, () => p ? p.v.hr   + (Math.random()-.5)*4 : 72);
+  spo2C.data.datasets[0].data = Array.from({length:n}, () => p ? p.v.spo2 + (Math.random()-.5)*1 : 97);
+  hrC.update('none');
+  spo2C.update('none');
+  // UI updates
+  document.getElementById('connectBtn').disabled = true;
+  document.getElementById('disconnectBtn').style.display = 'block';
+  const btn = document.getElementById('bleBtn');
+  btn.classList.add('connected');
+  document.getElementById('bleBtnLabel').textContent = deviceName + ' — ' + (p?.bed || 'Bed '+connectedBed);
+  document.getElementById('liveCard').style.display = 'block';
+  document.getElementById('chartLabel').textContent  = 'HR — '   + (p?.bed || 'Bed '+connectedBed) + ' (LIVE 🔵)';
+  document.getElementById('spo2Label').textContent = 'SpO₂ — ' + (p?.bed || 'Bed '+connectedBed) + ' (LIVE 🔵)';
+  renderPatients();
+}
+
+function onDisconnected(){
+  setBleStatus('Device disconnected.','err');
+  cleanupBle();
+}
+
+async function disconnectDevice(){
+  if(bleDevice&&bleDevice.gatt.connected) await bleDevice.gatt.disconnect();
+  cleanupBle();
+  closeModal();
+}
+
+function cleanupBle(){
+  if(demoTimer){ clearInterval(demoTimer); demoTimer=null; document.getElementById('demoBtn').textContent='▶ Run Demo'; }
+  bleDevice=null; bleChar=null; connectedBed=null; lastLiveHR=null;
+  document.getElementById('liveCard').style.display='none';
+  document.getElementById('liveHR').textContent='—';
+  document.getElementById('bleBtn').classList.remove('connected');
+  document.getElementById('bleBtnLabel').textContent='Connect Device';
+  document.getElementById('connectBtn').textContent='🔍 Scan & Connect';
+  document.getElementById('connectBtn').disabled=false;
+  document.getElementById('disconnectBtn').style.display='none';
+  document.getElementById('chartLabel').textContent='HR — Bed 4';
+  document.getElementById('spo2Label').textContent='SpO₂ — Bed 4';
+  renderPatients();
+}
+
+function triggerLiveAlert(type,title,desc){
+  const existing=ALERTS.find(a=>a.title===title);
+  if(!existing) ALERTS.unshift({type,icon:type==='critical'?'🚨':'⚠️',title,desc});
+  renderAlerts();
+}
+
+function setBleStatus(msg,cls){
+  const el=document.getElementById('bleStatus');
+  el.textContent=msg;
+  el.className='ble-status'+(cls?' '+cls:'');
+}
+
+// ── MODAL ─────────────────────────────────────────────────
+function openModal(){
+  buildBedChips();
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+
+function buildBedChips(){
+  document.getElementById('bedSelectRow').innerHTML=
+    PATIENTS.map(p=>`<div class="bed-chip${selectedBedId===p.id?' selected':''}"
+      onclick="selectBed(this,${p.id})">${p.bed}</div>`).join('');
+}
+
+function selectDevice(el,type){
+  // Auto-highlight the Run Demo button when demo type is selected
+  const db = document.getElementById('demoBtn');
+  if(db) db.style.borderColor = type==='demo' ? '#a78bfa' : '';
+  if(type==='demo') db.style.background='rgba(167,139,250,0.15)';
+  else db.style.background='';
+  document.querySelectorAll('.device-option').forEach(d=>d.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedDeviceType=type;
+}
+
+function selectBed(el,id){
+  document.querySelectorAll('.bed-chip').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedBedId=id;
+}
+
+// ── CLOCK ─────────────────────────────────────────────────
+function tick(){
+  document.getElementById('clock').textContent=
+    new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+// ── INIT ──────────────────────────────────────────────────
+renderPatients();
+renderAlerts();
+tick();
+setInterval(tick,1000);
+
+setInterval(()=>{
+  jitter();
+  // Charts are pushed by demo/BLE tick — only push for non-live fallback
+  if(!connectedBed) pushCharts(4);
+},2000);
+
+// ── DEMO MODE ─────────────────────────────────────────────
+// Simulates a Polar H10 chest strap with clinically realistic data.
+// HR follows a natural sinus rhythm pattern with HRV. SpO2 stays 95-99%.
+// Alerts fire automatically when values cross thresholds.
+
+let demoTimer = null;
+let demoHR = 72;
+let demoSpo2 = 97.5;
+let demoTrend = 0;       // -1 = falling, 0 = stable, 1 = rising
+let demoTrendCount = 0;
+let demoCycleCount = 0;
+
+function startDemo(){
+  if(demoTimer){ stopDemo(); return; }
+
+  // Pick the selected bed even when clicking Run Demo directly
+  selectedBedId = selectedBedId || 1;
+  connectedBed  = selectedBedId;
+
+  const p = PATIENTS.find(x => x.id === connectedBed);
+  setBleStatus('✓ Demo mode active — simulating Polar H10 on ' + (p?.bed || 'Bed ' + connectedBed), 'ok');
+
+  document.getElementById('demoBtn').textContent  = '⏹ Stop Demo';
+  document.getElementById('connectBtn').disabled  = true;
+  document.getElementById('disconnectBtn').style.display = 'block';
+
+  // Seed from the patient's current baseline so it looks natural
+  demoHR   = p ? p.v.hr   : 72;
+  demoSpo2 = p ? p.v.spo2 : 97;
+
+  onConnected();   // reuse same connected-state logic as real BLE
+
+  // Fire every 800ms (similar to real HRS notification rate)
+  demoTimer = setInterval(tickDemo, 800);
+}
+
+function stopDemo(){
+  clearInterval(demoTimer);
+  demoTimer = null;
+  document.getElementById('demoBtn').textContent = '▶ Run Demo';
+  cleanupBle();
+}
+
+function tickDemo(){
+  demoCycleCount++;
+
+  // ── HR simulation ─────────────────────────────────────
+  // Randomly change trend every 15-40 ticks (~12-32 seconds)
+  if(demoTrendCount <= 0){
+    demoTrend     = [-1, -1, 0, 0, 0, 1, 1][Math.floor(Math.random()*7)];
+    demoTrendCount = 15 + Math.floor(Math.random()*25);
+  }
+  demoTrendCount--;
+
+  // HRV-style noise (healthy heart is never perfectly regular)
+  const noise = (Math.random() - 0.5) * 3;
+  const drift = demoTrend * 0.4;
+  demoHR = Math.max(45, Math.min(155, demoHR + noise + drift));
+
+  // ── SpO2 simulation ───────────────────────────────────
+  const spo2noise = (Math.random() - 0.5) * 0.4;
+  demoSpo2 = Math.max(88, Math.min(100, demoSpo2 + spo2noise));
+
+  // ── Simulate a stress event every ~90 ticks (~72s) ───
+  // HR spikes then recovers — makes the charts look real
+  if(demoCycleCount % 90 === 0){
+    demoHR   = Math.min(145, demoHR + 18 + Math.random()*10);
+    demoSpo2 = Math.max(90,  demoSpo2 - 1.5);
+    demoTrend = -1;  // will recover
+    demoTrendCount = 30;
+  }
+
+  const hr   = Math.round(demoHR);
+  const spo2 = Math.round(demoSpo2 * 10) / 10;
+
+  // ── RR interval from HR ───────────────────────────────
+  const rrMs = Math.round(60000 / demoHR + (Math.random()-0.5)*40);
+
+  // ── Push into patient vitals ──────────────────────────
+  const p = PATIENTS.find(x => x.id === connectedBed);
+  if(p){
+    p.v.hr   = hr;
+    p.v.spo2 = spo2;
+    // Estimate resp rate from RR interval variability
+    if(rrMs > 0) p.v.rr = Math.min(35, Math.max(8, Math.round(60000 / rrMs / 4.2 + 11)));
+  }
+
+  // ── Update live stat card ─────────────────────────────
+  document.getElementById('liveHR').textContent = hr;
+
+  // ── Push to sidebar charts ────────────────────────────
+  pushCharts(connectedBed);
+  renderPatients();
+
+  // ── Threshold alerts ──────────────────────────────────
+  const bedLabel = p?.bed || 'Bed ' + connectedBed;
+  if(hr > 120)
+    triggerLiveAlert('critical', '🚨 Demo — HR Critical ' + bedLabel, 'Live HR ' + hr + ' bpm › threshold 120');
+  else if(hr < 50)
+    triggerLiveAlert('critical', '🚨 Demo — HR Low ' + bedLabel, 'Live HR ' + hr + ' bpm ‹ threshold 50');
+  else if(spo2 < 92)
+    triggerLiveAlert('critical', '🚨 Demo — SpO₂ Critical ' + bedLabel, 'Live SpO₂ ' + spo2 + '% ‹ threshold 92%');
+  else if(spo2 < 95)
+    triggerLiveAlert('warning', '⚠️ Demo — SpO₂ Low ' + bedLabel, 'Live SpO₂ ' + spo2 + '%');
+}
+
+// ── THEME TOGGLE ──────────────────────────────────────────
+let isLight = false;
+
+function toggleTheme(){
+  isLight = !isLight;
+  document.documentElement.classList.toggle('light', isLight);
+  document.getElementById('themeBtn').textContent = isLight ? '🌑' : '🌙';
+  localStorage.setItem('vw-theme', isLight ? 'light' : 'dark');
+  updateChartTheme();
+}
+
+function updateChartTheme(){
+  const grid = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)';
+  const tick = isLight ? '#9ca3af' : '#7d8590';
+  [hrC, spo2C].forEach(chart => {
+    chart.options.scales.x.grid.color  = grid;
+    chart.options.scales.y.grid.color  = grid;
+    chart.options.scales.x.ticks.color = tick;
+    chart.options.scales.y.ticks.color = tick;
+    chart.options.scales.x.border = { color: grid };
+    chart.options.scales.y.border = { color: grid };
+    chart.update('none');
+  });
+}
+
+// Restore saved theme on load
+(function(){
+  const saved = localStorage.getItem('vw-theme');
+  if(saved === 'light'){
+    isLight = true;
+    document.documentElement.classList.add('light');
+    document.getElementById('themeBtn').textContent = '🌑';
+    // charts not ready yet — updateChartTheme called after init below
+  }
+})();
+
+
+// ── API HELPERS ────────────────────────────────────────────
+async function api(path, method='GET', body=null){
+  const headers = {'Content-Type':'application/json'};
+  if(AUTH_TOKEN) headers['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+  const res = await fetch(API_URL + path, {method, headers, body: body ? JSON.stringify(body) : null});
+  if(!res.ok){
+    const err = await res.json().catch(()=>({detail:res.statusText}));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+// ── LOGIN / REGISTER ────────────────────────────────────────
+function showLogin()    { document.getElementById('loginView').style.display=''; document.getElementById('registerView').style.display='none'; }
+function showRegister() { document.getElementById('loginView').style.display='none'; document.getElementById('registerView').style.display=''; }
+
+async function doLogin(){
+  const url   = document.getElementById('apiUrl').value.trim().replace(/\/$/,'');
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPassword').value;
+  const status = document.getElementById('loginStatus');
+  if(!email||!pass){ status.textContent='Please fill in email and password.'; status.className='ble-status err'; return; }
+  status.textContent='Signing in…'; status.className='ble-status';
+  localStorage.setItem('vw_api', url);
+  // temporarily update API_URL for this call
+  const oldUrl = API_URL;
+  try {
+    const res = await fetch(url + '/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password: pass})
+    });
+    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||'Login failed'); }
+    const data = await res.json();
+    AUTH_TOKEN  = data.access_token;
+    HOSPITAL_ID = data.hospital_id;
+    STAFF_NAME  = data.name;
+    STAFF_ROLE  = data.role;
+    localStorage.setItem('vw_token',       AUTH_TOKEN);
+    localStorage.setItem('vw_hospital_id', HOSPITAL_ID);
+    localStorage.setItem('vw_staff_name',  STAFF_NAME);
+    localStorage.setItem('vw_role',        STAFF_ROLE);
+    onLoggedIn();
+  } catch(e){
+    status.textContent = '✗ ' + e.message;
+    status.className = 'ble-status err';
+  }
+}
+
+async function doRegister(){
+  const url = document.getElementById('apiUrl').value.trim().replace(/\/$/,'');
+  const status = document.getElementById('regStatus');
+  const body = {
+    name: document.getElementById('regName').value.trim(),
+    slug: document.getElementById('regSlug').value.trim().toLowerCase().replace(/\s+/g,'-'),
+    city: document.getElementById('regCity').value.trim(),
+    country: document.getElementById('regCountry').value.trim(),
+    admin_email: document.getElementById('regEmail').value.trim(),
+    admin_password: document.getElementById('regPass').value,
+    admin_first_name: document.getElementById('regFirst').value.trim(),
+    admin_last_name: document.getElementById('regLast').value.trim(),
+  };
+  if(!body.name||!body.slug||!body.admin_email||!body.admin_password){
+    status.textContent='Please fill in all required fields.'; status.className='ble-status err'; return;
+  }
+  status.textContent='Registering hospital…'; status.className='ble-status';
+  try {
+    const res = await fetch(url + '/api/hospitals/register', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if(!res.ok){ const e=await res.json(); throw new Error(e.detail||'Registration failed'); }
+    status.textContent='✓ Hospital registered! Signing you in…'; status.className='ble-status ok';
+    // Auto login
+    document.getElementById('apiUrl').value = url;
+    document.getElementById('loginEmail').value = body.admin_email;
+    document.getElementById('loginPassword').value = body.admin_password;
+    showLogin();
+    setTimeout(doLogin, 800);
+  } catch(e){
+    status.textContent='✗ ' + e.message; status.className='ble-status err';
+  }
+}
+
+function useDemoMode(){
+  AUTH_TOKEN = null; HOSPITAL_ID = null;
+  STAFF_NAME = 'Demo User'; STAFF_ROLE = 'doctor';
+  document.getElementById('userPill').textContent = 'Demo Mode ▾';
+  document.getElementById('loginModal').classList.remove('open');
+  // demo data already loaded
+}
+
+function onLoggedIn(){
+  document.getElementById('loginModal').classList.remove('open');
+  document.getElementById('userPill').textContent = STAFF_NAME + ' ▾';
+  if(STAFF_ROLE === 'admin' || STAFF_ROLE === 'doctor' || STAFF_ROLE === 'nurse'){
+    document.getElementById('admitBtn').style.display = '';
+  }
+  loadPatientsFromAPI();
+  connectWebSocket();
+}
+
+// ── LOAD REAL PATIENTS FROM API ────────────────────────────
+async function loadPatientsFromAPI(){
+  if(!AUTH_TOKEN) return;
+  try {
+    const patients = await api('/api/patients');
+    if(patients.length === 0) return; // keep demo data if empty
+    // Map API patients into PATIENTS array format
+    PATIENTS.length = 0;
+    patients.forEach(p => {
+      PATIENTS.push({
+        id: p.id,
+        name: p.first_name + ' ' + p.last_name,
+        bed: p.bed_number,
+        age: p.age || '—',
+        ward: p.ward,
+        status: p.status || 'stable',
+        v: { hr: 72, spo2: 97, sbp: 120, dbp: 78, rr: 16, temp: 36.8 }
+      });
+    });
+    renderPatients();
+    updateStats();
+  } catch(e){
+    console.warn('Could not load patients from API:', e.message);
+  }
+}
+
+// ── WEBSOCKET — live updates ────────────────────────────────
+function connectWebSocket(){
+  if(!AUTH_TOKEN || !HOSPITAL_ID) return;
+  const wsUrl = API_URL.replace('http','ws') + '/ws/' + HOSPITAL_ID + '?token=' + AUTH_TOKEN;
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen  = () => console.log('WS connected to hospital', HOSPITAL_ID);
+  ws.onclose = () => setTimeout(connectWebSocket, 3000); // auto-reconnect
+  ws.onerror = (e) => console.warn('WS error', e);
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if(msg.event === 'patient_admitted'){
+      // Add new patient card instantly — no refresh needed
+      const p = msg.patient;
+      PATIENTS.push({
+        id: p.id, name: p.first_name + ' ' + p.last_name,
+        bed: p.bed_number, age: p.age, ward: p.ward, status: 'stable',
+        v: { hr: 72, spo2: 97, sbp: 120, dbp: 78, rr: 16, temp: 36.8 }
+      });
+      ALERTS.unshift({type:'info', icon:'ℹ️',
+        title: 'New patient admitted — ' + p.bed_number,
+        desc: p.first_name + ' ' + p.last_name + ' (admitted by ' + msg.admitted_by + ')'});
+      renderPatients(); renderAlerts(); updateStats();
+    }
+
+    if(msg.event === 'vitals_update'){
+      const p = PATIENTS.find(x => x.id === msg.patient_id);
+      if(p){
+        const v = msg.vitals;
+        if(v.heart_rate)       p.v.hr   = v.heart_rate;
+        if(v.spo2)             p.v.spo2 = v.spo2;
+        if(v.systolic_bp)      p.v.sbp  = v.systolic_bp;
+        if(v.diastolic_bp)     p.v.dbp  = v.diastolic_bp;
+        if(v.respiratory_rate) p.v.rr   = v.respiratory_rate;
+        if(v.temperature)      p.v.temp = v.temperature;
+        p.status = msg.status || p.status;
+        if(msg.alerts?.length){
+          msg.alerts.forEach(a => ALERTS.unshift({
+            type: a.severity, icon: a.severity==='critical'?'🚨':'⚠️',
+            title: a.message, desc: p.bed
+          }));
+          renderAlerts();
+        }
+        renderPatients(); updateStats();
+      }
+    }
+
+    if(msg.event === 'patient_discharged'){
+      const idx = PATIENTS.findIndex(x => x.id === msg.patient_id);
+      if(idx !== -1){ PATIENTS.splice(idx, 1); renderPatients(); updateStats(); }
+    }
+
+    if(msg.event === 'alert_acknowledged'){
+      renderAlerts();
+    }
+  };
+}
+
+// ── ADMIT PATIENT ──────────────────────────────────────────
+function openAdmit()  { document.getElementById('admitModal').classList.add('open'); }
+function closeAdmit() { document.getElementById('admitModal').classList.remove('open'); }
+
+async function doAdmit(){
+  const status = document.getElementById('admitStatus');
+  const body = {
+    first_name: document.getElementById('aFirst').value.trim(),
+    last_name:  document.getElementById('aLast').value.trim(),
+    age:        parseInt(document.getElementById('aAge').value) || 0,
+    gender:     document.getElementById('aGender').value,
+    bed_number: document.getElementById('aBed').value.trim(),
+    ward:       document.getElementById('aWard').value,
+    diagnosis:  document.getElementById('aDiag').value.trim(),
+    attending:  document.getElementById('aDoc').value.trim(),
+  };
+  if(!body.first_name||!body.last_name||!body.bed_number){
+    status.textContent='Please fill in patient name and bed number.';
+    status.className='ble-status err'; return;
+  }
+  status.textContent='Admitting patient…'; status.className='ble-status';
+  try {
+    await api('/api/patients','POST', body);
+    status.textContent='✓ Patient admitted — all dashboards updated!';
+    status.className='ble-status ok';
+    setTimeout(closeAdmit, 1500);
+    // Clear form
+    ['aFirst','aLast','aAge','aBed','aDiag','aDoc'].forEach(id => document.getElementById(id).value='');
+  } catch(e){
+    status.textContent='✗ ' + e.message; status.className='ble-status err';
+  }
+}
+
+// ── AUTO LOGIN if token saved ──────────────────────────────
+if(AUTH_TOKEN && HOSPITAL_ID){
+  document.getElementById('loginModal').classList.remove('open');
+  document.getElementById('userPill').textContent = STAFF_NAME + ' ▾';
+  document.getElementById('admitBtn').style.display = '';
+  loadPatientsFromAPI();
+  connectWebSocket();
+}
+
+// call once charts exist
+if(isLight) updateChartTheme();
+</script>
+</body>
+</html>

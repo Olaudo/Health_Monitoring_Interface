@@ -221,6 +221,7 @@ patient-monitor/
 ├── .env.example
 └── README.md
 ```
+<img width="1055" height="540" alt="image" src="https://github.com/user-attachments/assets/1e771825-e973-4b4c-a8da-f2a3c0f8528a" />
 
 ---
 
